@@ -32,7 +32,9 @@ jobs:
         run: |
           set -eu
           git config --global --add safe.directory "$PWD"
-          urls=$(curl -fsSL "$RELEASE" | jq -r '.assets[].browser_download_url | select(endswith(".pkg.tar.zst"))')
+          # debug symbol packages are left out: they are not needed to install and the
+          # largest exceeds GitHub's 100 MB file limit
+          urls=$(curl -fsSL "$RELEASE" | jq -r '.assets[].browser_download_url | select(endswith(".pkg.tar.zst")) | select(contains("-debug-") | not)')
           new=""
           for url in $urls; do
             f=$(basename "$url")
