@@ -21,7 +21,7 @@ Import and trust the repository key once:
 
 ```sh
 curl -sL https://abysswm.github.io/arch/abyss.gpg | sudo pacman-key --add -
-sudo pacman-key --lsign-key KEYID
+sudo pacman-key --lsign-key 7429EE25FE7F6A87620632B360D0CDE7A027F6A6
 ```
 
 Add the repository to `/etc/pacman.conf`:
