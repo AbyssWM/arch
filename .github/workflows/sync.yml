@@ -1,0 +1,69 @@
+# Picks up the packages that arch-builds puts into its release "packages", signs them with the
+# repository key (secret ARCH_SIGNING_KEY) and adds them to abyss.db, which GitHub Pages serves.
+name: Sync packages
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      SIGNING_KEY: ${{ secrets.ARCH_SIGNING_KEY }}
+      KEY_ID: 7429EE25FE7F6A87620632B360D0CDE7A027F6A6
+      RELEASE: https://api.github.com/repos/AbyssWM/arch-builds/releases/tags/packages
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git gnupg jq
+
+      - uses: actions/checkout@v4
+
+      - name: Sign new packages and add them to the database
+        run: |
+          set -eu
+          git config --global --add safe.directory "$PWD"
+          urls=$(curl -fsSL "$RELEASE" | jq -r '.assets[].browser_download_url | select(endswith(".pkg.tar.zst"))')
+          new=""
+          for url in $urls; do
+            f=$(basename "$url")
+            [ -f "$f" ] || new="$new $f"
+          done
+          if [ -z "$new" ]; then
+            echo "No new packages."
+            exit 0
+          fi
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::The secret ARCH_SIGNING_KEY is not set"
+            exit 1
+          fi
+
+          export GNUPGHOME="$(mktemp -d)"
+          printf '%s\n' "$SIGNING_KEY" | gpg --batch --import
+          for f in $new; do
+            curl -fsSLO "https://github.com/AbyssWM/arch-builds/releases/download/packages/$f"
+            gpg --batch --yes --detach-sign --local-user "$KEY_ID" "$f"
+          done
+
+          # -R removes the files of replaced versions; GitHub Pages serves no symlinks, so the
+          # database links become real files
+          repo-add --sign --key "$KEY_ID" -R abyss.db.tar.gz $new
+          for f in abyss.db abyss.db.sig abyss.files abyss.files.sig; do
+            if [ -L "$f" ]; then cp --remove-destination "$(readlink "$f")" "$f"; fi
+          done
+          gpg --armor --export "$KEY_ID" > abyss.gpg
+
+          git config user.name bb8TheRobot
+          git config user.email bb8TheRobot@users.noreply.github.com
+          git add -A
+          git commit -m "Packages:$new"
+          git push
