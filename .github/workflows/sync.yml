@@ -21,6 +21,7 @@ jobs:
     env:
       SIGNING_KEY: ${{ secrets.ARCH_SIGNING_KEY }}
       KEY_ID: 7429EE25FE7F6A87620632B360D0CDE7A027F6A6
+      GH_TOKEN: ${{ github.token }}
       RELEASE: https://api.github.com/repos/AbyssWM/arch-builds/releases/tags/packages
     steps:
       - name: Install tools
@@ -34,7 +35,7 @@ jobs:
           git config --global --add safe.directory "$PWD"
           # debug symbol packages are left out: they are not needed to install and the
           # largest exceeds GitHub's 100 MB file limit
-          urls=$(curl -fsSL "$RELEASE" | jq -r '.assets[].browser_download_url | select(endswith(".pkg.tar.zst")) | select(contains("-debug-") | not)')
+          urls=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$RELEASE" | jq -r '.assets[].browser_download_url | select(endswith(".pkg.tar.zst")) | select(contains("-debug-") | not)')
           new=""
           for url in $urls; do
             f=$(basename "$url")
